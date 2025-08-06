@@ -1,0 +1,13 @@
+transformers>=4.39.3
+datasets
+peft
+sentence-transformers
+faiss-cpu
+pandas
+fastapi
+uvicorn
+torch>=2.1.0
+bitsandbytes
+trl
+scikit-learn
+protobuf==4.25.3

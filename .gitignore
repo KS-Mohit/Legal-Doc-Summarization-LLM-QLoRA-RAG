@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments
+.venv/
+.venv310/
+venv/
+env/
+
+# IDE / Editor specific
+.vscode/
+.idea/
+
+# Environment variables
+.env
+
+# Datasets - These are too large for Git.
+# Add a README in the datasets folder explaining where to download the data from.
+datasets/
+
+# Model artifacts and checkpoints - These are build outputs, not source code.
+final_adapter_model/
+training_checkpoints/
+
+# OS-specific
+.DS_Store
+Thumbs.db
