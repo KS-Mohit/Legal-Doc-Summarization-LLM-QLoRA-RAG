@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Legal AI Summarizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&display=swap');
+        body { font-family: 'Geist Mono', monospace; background-color: #0a0a0a; color: #ededed; }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(107, 114, 128, 0.3); border-radius: 2px; }
+        .typing-text::before {
+            content: "Ready for legal document analysis...";
+            animation: typing 2.5s steps(40), blink .5s step-end infinite alternate;
+            white-space: nowrap; overflow: hidden; border-right: 3px solid;
+            width: 0; display: inline-block; animation-fill-mode: forwards;
+        }
+        @keyframes typing { from { width: 0 } to { width: 100% } }
+        @keyframes blink { 50% { border-color: transparent } }
+        /* Simple loading dots animation */
+        .loading-dots span { animation: blink-dots 1.4s infinite both; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink-dots { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-black antialiased">
+    <div id="app-container">
+        <!-- App will be rendered here by JavaScript -->
+    </div>
+
+    <script>
+        const appContainer = document.getElementById('app-container');
+        
+        // --- STATE MANAGEMENT ---
+        let state = {
+            messages: [],
+            started: false,
+            isLoading: false,
+            summarizationHistory: [],
+            activeSummaryId: null
+        };
+
+        // --- RENDER FUNCTIONS ---
+        function render() {
+            if (!state.started) {
+                appContainer.innerHTML = renderLanding();
+            } else {
+                appContainer.innerHTML = renderChatInterface();
+            }
+            addEventListeners();
+            const chatContainer = document.getElementById('chat-container');
+            if(chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function renderLanding() {
+            return `
+                <div class="flex min-h-screen text-gray-100 relative">
+                    <div class="flex-1 flex flex-col items-center justify-center p-6 relative text-center">
+                        <div class="relative z-10 max-w-4xl mx-auto space-y-8">
+                            <h1 class="text-4xl md:text-6xl font-bold mb-6 tracking-tight bg-gradient-to-r from-gray-100 to-gray-400 text-transparent bg-clip-text">Legal AI Summarizer</h1>
+                            <p class="text-lg md:text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed typing-text"><span class="typing-cursor"></span></p>
+                            <div class="flex flex-col space-y-4 max-w-md mx-auto">
+                                <button id="startButton" class="w-full group relative px-16 py-6 text-base bg-transparent text-green-400 border-2 border-green-500/30 hover:border-green-400/50 transition-all duration-300 transform hover:scale-105">
+                                    <span class="relative z-10 group-hover:text-green-300 tracking-wider font-bold">BEGIN ANALYSIS</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function renderChatInterface() {
+            const messagesHTML = state.messages.map(msg => {
+                const sanitizedContent = msg.content ? msg.content.replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+                if (msg.isBot) {
+                    const statusHTML = msg.status ? `<p class="text-green-400/80 mb-2">${msg.status.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : '';
+                    const chunksHTML = (msg.chunks || []).map(chunk => `<div class="mb-4 p-3 border-l-2 border-gray-700"><p class="font-bold text-gray-400 mb-1">Chunk ${chunk.chunk_num}/${chunk.total_chunks}</p><p>${chunk.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p></div>`).join('');
+                    const finalContentHTML = msg.finalContent ? `<div class="mt-4 pt-4 border-t border-gray-700">${msg.finalContent.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>` : '';
+                    const answerHTML = msg.answer || '';
+
+                    return `
+                        <div class="group flex flex-col space-y-2 mb-6">
+                            <div class="flex items-center space-x-2 text-xs text-gray-500"><span>AI</span></div>
+                            <div class="inline-block max-w-[85%] w-fit"><div class="inline-block p-3 text-sm backdrop-blur-sm rounded-lg bg-gray-900/20 border border-gray-800/50"><div class="whitespace-pre-wrap text-gray-200">
+                                ${statusHTML ? `<p id="status-${msg.id}" class="text-green-400/80 mb-2">${statusHTML}</p>` : ''}
+                                ${chunksHTML}
+                                ${finalContentHTML}
+                                <p id="answer-${msg.id}">${answerHTML}</p>
+                            </div></div></div>
+                        </div>`;
+                }
+                return `
+                    <div class="group flex flex-col space-y-2 items-end mb-6">
+                        <div class="flex items-center space-x-2 text-xs text-gray-500 flex-row-reverse space-x-reverse"><span>You</span></div>
+                        <div class="inline-block max-w-[85%] w-fit"><div class="inline-block p-3 text-sm backdrop-blur-sm rounded-lg bg-blue-600/30 border border-blue-500/50"><div class="whitespace-pre-wrap text-gray-200">${sanitizedContent}</div></div></div>
+                    </div>`;
+            }).join('');
+
+            const placeholder = state.activeSummaryId ? 'Ask a follow-up question about the summary...' : 'Enter a query to find a new document...';
+            
+            const initialButtonsHTML = `
+                <div class="grid grid-cols-1 gap-2 mt-3 sm:grid-cols-3 mb-2">
+                    <button class="example-query p-2 rounded-md bg-gray-900/70 border border-gray-700/50 hover:border-white text-white text-sm text-left transition-all">lakshminarayana iyer</button>
+                    <button class="example-query p-2 rounded-md bg-gray-900/70 border border-gray-700/50 hover:border-white text-white text-sm text-left transition-all">V.C. Rangadurai vs D. Gopalan</button>
+                    <button class="example-query p-2 rounded-md bg-gray-900/70 border border-gray-700/50 hover:border-white text-white text-sm text-left transition-all">Hindu Succession Act</button>
+                </div>
+            `;
+            
+            const historyButtonsHTML = state.summarizationHistory.map(summary => {
+                const isActive = summary.id === state.activeSummaryId;
+                return `<button class="history-btn p-2 rounded-md text-white text-xs text-left transition-all truncate ${isActive ? 'bg-green-800/70 border-green-600/50' : 'bg-gray-900/70 border-gray-700/50 hover:border-white'}" data-id="${summary.id}">${summary.query}</button>`;
+            }).join('');
+
+            const historyPanelHTML = state.summarizationHistory.length > 0 ? `
+                <div class="p-2 rounded-md bg-gray-900/20 border border-gray-800/30 mb-2">
+                    <h3 class="text-sm font-bold text-gray-400 mb-2 px-1">Session History</h3>
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        ${historyButtonsHTML}
+                        <button class="new-search-btn p-2 rounded-md bg-amber-800/70 border border-amber-700/50 hover:border-white text-white text-sm text-center transition-all">+ Start New Analysis</button>
+                    </div>
+                </div>
+            ` : '';
+
+            // --- CORRECTED LAYOUT ---
+            return `
+                <div class="flex flex-col h-screen p-4 max-w-4xl mx-auto">
+                    <header class="text-center mb-4 flex-shrink-0">
+                        <h1 class="text-2xl font-bold text-green-400">Legal AI Summarizer</h1>
+                    </header>
+                    
+                    <div id="chat-container" class="flex-1 border border-gray-700 rounded-lg p-4 overflow-y-auto mb-4 scrollbar-thin min-h-0">
+                        <div id="chatWindow">${messagesHTML}</div>
+                    </div>
+
+                    <footer class="flex-shrink-0">
+                        ${state.summarizationHistory.length === 0 ? initialButtonsHTML : historyPanelHTML}
+                        <div class="flex gap-2 items-center bg-gray-900/20 border border-gray-800/30 rounded-lg backdrop-blur-md relative">
+                            <input id="userInput" type="text" placeholder="${placeholder}" class="flex-1 p-3 bg-transparent text-base focus:outline-none" autocomplete="off">
+                            <button id="sendButton" class="h-full px-4 py-3 text-2xl font-bold text-gray-400 hover:text-green-400 transition-colors">→</button>
+                        </div>
+                    </footer>
+                </div>`;
+        }
+
+        // --- CORRECTED EVENT HANDLERS & LOGIC ---
+        function addEventListeners() {
+            if (!state.started) {
+                document.getElementById('startButton')?.addEventListener('click', () => { 
+                    state.started = true;
+                    state.messages.push({ isBot: true, answer: "Hello! Enter a query below to find and summarize a legal document." });
+                    render();
+                });
+            } else {
+                document.getElementById('sendButton')?.addEventListener('click', handleUserInput);
+                document.getElementById('userInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleUserInput(); });
+                
+                document.querySelectorAll('.example-query').forEach(b => b.addEventListener('click', () => { 
+                    const userInput = document.getElementById('userInput');
+                    if (userInput) {
+                        userInput.value = b.textContent;
+                        userInput.focus();
+                    }
+                }));
+
+                document.querySelectorAll('.history-btn').forEach(b => b.addEventListener('click', (e) => {
+                    const summaryId = parseInt(e.currentTarget.dataset.id);
+                    state.activeSummaryId = summaryId;
+                    const activeSummary = state.summarizationHistory.find(s => s.id === summaryId);
+                    state.messages.push({ isBot: true, answer: `Switched context. Now asking questions about the summary for: "${activeSummary.query}"` });
+                    render();
+                }));
+
+                document.querySelector('.new-search-btn')?.addEventListener('click', () => {
+                    state.activeSummaryId = null; 
+                    state.messages = [{ isBot: true, answer: "Ready for a new document analysis. Please enter your query." }];
+                    render();
+                });
+            }
+        }
+
+        async function handleUserInput() {
+            const userInputElement = document.getElementById('userInput');
+            const query = userInputElement.value.trim();
+            if (!query || state.isLoading) return;
+
+            state.isLoading = true;
+            state.messages.push({ content: query, isBot: false });
+            const originalQueryForHistory = query;
+            userInputElement.value = '';
+            
+            if (state.activeSummaryId) {
+                // --- Q&A MODE (NON-STREAMING from Gemini via POST) ---
+                const botMessageId = `bot-msg-${Date.now()}`;
+                const loadingHTML = `<div class="loading-dots"><span>.</span><span>.</span><span>.</span></div>`;
+                state.messages.push({ id: botMessageId, isBot: true, answer: loadingHTML });
+                render();
+                
+                const activeSummary = state.summarizationHistory.find(s => s.id === state.activeSummaryId);
+                if (!activeSummary) { /* handle error */ return; }
+
+                try {
+                    const response = await fetch('http://127.0.0.1:5000/ask', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question: query, context: activeSummary.context }),
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! ${response.status}`);
+                    const data = await response.json();
+                    
+                    const botMessage = state.messages.find(m => m.id === botMessageId);
+                    if (botMessage) {
+                        botMessage.answer = data.answer;
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    const botMessage = state.messages.find(m => m.id === botMessageId);
+                    if (botMessage) botMessage.answer = 'Error connecting to the server for Q&A.';
+                } finally {
+                    state.isLoading = false;
+                    render(); // Re-render the UI with the final answer
+                }
+
+            } else {
+                // --- SUMMARIZATION MODE (Stream from local model via GET) ---
+                const botMessageId = `bot-msg-${Date.now()}`;
+                state.messages.push({ id: botMessageId, isBot: true, status: 'Initializing...', chunks: [], finalContent: '' });
+                render();
+
+                const eventSource = new EventSource(`http://127.0.0.1:5000/query?query=${encodeURIComponent(query)}`);
+                
+                eventSource.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    const botMessage = state.messages.find(m => m.id === botMessageId);
+                    if (!botMessage) return;
+
+                    if (data.type === 'status') botMessage.status = data.content;
+                    else if (data.type === 'chunk') botMessage.chunks.push(data);
+                    else if (data.type === 'final') {
+                        botMessage.status = '';
+                        botMessage.finalContent = data.content;
+                        
+                        const newSummary = { id: botMessageId, query: originalQueryForHistory, context: data.context_for_qa };
+                        state.summarizationHistory.push(newSummary);
+                        state.activeSummaryId = newSummary.id;
+
+                        eventSource.close();
+                        state.isLoading = false;
+                    } else if (data.type === 'error') {
+                        botMessage.status = 'Error';
+                        botMessage.finalContent = data.content;
+                        eventSource.close();
+                        state.isLoading = false;
+                    }
+                    render();
+                };
+                
+                eventSource.onerror = function() {
+                    const botMessage = state.messages.find(m => m.id === botMessageId);
+                    if (botMessage) {
+                        botMessage.status = 'Error';
+                        botMessage.finalContent = 'Error connecting to the server for summarization.';
+                    }
+                    state.isLoading = false;
+                    render();
+                    eventSource.close();
+                };
+            }
+        }
+        
+        // Initial Render on page load
+        render();
+
+    </script>
+</body>
+</html>
