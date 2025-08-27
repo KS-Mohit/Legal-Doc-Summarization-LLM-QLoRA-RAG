@@ -129,7 +129,3 @@ You can now interact with the application. Start by summarizing a document, and 
 * `backend/data_preprocessing.py`: The script for preparing the training data.
 * `datasets/`: The folder for the raw and processed legal document data.
 * `final_adapter_model/`: The output directory for the fine-tuned model adapter.
-
-## 🙏 Acknowledgements
-
-This project was developed by building upon the foundational concepts and structure provided by the original [Legal-Doc-Summarization-LLM-LoRA-RAG repository by aryanmangal769](https://github.com/aryanmangal769/Legal-Doc-Summarization-LLM-LoRA-RAG) and the UI from the [chat-with-jfk-files repository by voynow](https://github.com/voynow/chat-with-jfk-files).
